@@ -1,4 +1,4 @@
-## Class project for CSE 5479 at The Ohio State University
+### Class project for CSE 5479 at The Ohio State University
 
 The code is adapted from https://github.com/pytorch/opacus/blob/main/examples/mnist.py.
 
