@@ -532,12 +532,12 @@ def train(delta, disable_dp, model, device, train_loader, optimizer, accountant,
         output = model(data)
         loss = criterion(output, target)
         loss.backward()
+        losses.append(loss.item())
         if logger != None:
             logger.append_record(epoch, np.array(_batch_idx), data.grad.detach().cpu().numpy())
         optimizer.step()
 
     if logger != None:
-        losses.append(loss.item())
         logger.append_model(epoch, model.state_dict())
 
     lossmean = np.mean(losses)
