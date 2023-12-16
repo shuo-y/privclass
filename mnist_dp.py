@@ -238,9 +238,15 @@ def train_recon_net(args, shadow_models, shadow_predicts):
 
     return net
 
-def prep_recon_model(args, known_dataset):
+def prep_recon_model(args, known_dataset, prefix):
     net = SampleConvNet()
-    shadow_models, shadow_predicts = get_shadow_data(args, net, known_dataset)
+    if args.load_shadow != "":
+        print(f"load from {args.load_shadow}")
+        shadow_models, shadow_predicts = torch.load(args.load_shadow)
+    else:
+        shadow_models, shadow_predicts = get_shadow_data(args, net, known_dataset)
+    if args.save_model:
+        torch.save((shadow_models, shadow_predicts), f"{prefix}_shadow_data.pt")
     #if args.use_rec_tree:
     reg = train_recon_tree(args, shadow_models, shadow_predicts)
 
@@ -757,6 +763,12 @@ def main():
         default=0.1,
         help="For reconstruct loss in gradient based attack"
     )
+    parser.add_argument(
+        "--load_shadow",
+        type=str,
+        default="",
+        help="Data of shadow models"
+    )
     args = parser.parse_args()
 
     device = torch.device(args.device)
@@ -781,12 +793,19 @@ def main():
     target_data = all_train_dataset[args.reco_target][0]
     target_label = all_train_dataset[args.reco_target][1]
 
+    repro_str = (
+        f"mnist_attack{args.reco_target}_label{target_label}_recon_nondp{args.disable_dp}_guess_{args.num_guess}_e{args.shadow_epochs}_"
+        f"gradbased{args.gradient_based_attack}_trials{args.num_trials}_{args.opt_max_iter}_{args.clip_c}_"
+        f"{args.lr}_{args.sigma}_"
+        f"{args.max_per_sample_grad_norm}_{args.batch_size}_{args.epochs}"
+    )
+
     recoreg = None
     reconet = None
     nonprivlogger = gradient_logger()
     privlogger = gradient_logger(ispriv=True)
     if not args.gradient_based_attack:
-        recoreg, reconet = prep_recon_model(args, known_dataset)
+        recoreg, reconet = prep_recon_model(args, known_dataset, repro_str)
         nonprivlogger = None
         privlogger = None
 
@@ -817,13 +836,6 @@ def main():
     )
 
     run_results = []
-
-    repro_str = (
-        f"mnist_attack{args.reco_target}_label{target_label}_recon_nondp{args.disable_dp}_guess_{args.num_guess}_"
-        f"gradbased{args.gradient_based_attack}_trials{args.num_trials}_{args.opt_max_iter}_{args.clip_c}_"
-        f"{args.lr}_{args.sigma}_"
-        f"{args.max_per_sample_grad_norm}_{args.batch_size}_{args.epochs}"
-    )
 
     if not (args.gradient_based_attack == True and args.disable_dp == False):
         print(f"Non private version")
