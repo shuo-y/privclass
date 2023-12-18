@@ -202,6 +202,35 @@ def get_shadow_data(args, sample_net, known_dataset):
 
     return shadow_models, shadow_predicts
 
+def my_load_file(filename):
+    if type(filename) == str:
+        print(f"load from {filename}")
+        nparray = torch.load(filename)
+        return nparray
+    elif type(filename) == list:
+        arrlist = []
+        for fil in filename:
+            print(f"load one chunk {fil}")
+            nparray = torch.load(fil)
+            arrlist.append(nparray)
+        nparr = np.concatenate(arrlist)
+        return nparr
+
+def my_save_file(nparr, filename):
+    import sys
+    limit = 1024*1024*1024*2
+    if sys.getsizeof(nparr) > limit:
+        chunk = sys.getsizeof(nparr) // limit + 1
+        lens = max(1, len(nparr) // chunk)
+        start = 0
+        for cnt, start in enumerate(range(0, len(nparr), lens)):
+            subset = nparr[start:(start + lens)]
+            print(f"split and save to {filename}_{cnt}")
+            torch.save(subset, f"{filename}_{cnt}")
+    else:
+        print(f"save to {filename}")
+        torch.save(nparr, filename)
+
 def train_recon_tree(args, shadow_models, shadow_predicts):
     reg = xgb.XGBRegressor(
         device = args.device,
@@ -240,13 +269,14 @@ def train_recon_net(args, shadow_models, shadow_predicts):
 
 def prep_recon_model(args, known_dataset, prefix):
     net = SampleConvNet()
-    if args.load_shadow != "":
-        print(f"load from {args.load_shadow}")
-        shadow_models, shadow_predicts = torch.load(args.load_shadow)
+    if args.load_shadow_m != "" and args.load_shadow_pred != "":
+        shadow_models = my_load_file(eval(args.load_shadow_m))
+        shadow_predicts = my_load_file(eval(args.load_shadow_pred))
     else:
         shadow_models, shadow_predicts = get_shadow_data(args, net, known_dataset)
-    if args.save_model:
-        torch.save((shadow_models, shadow_predicts), f"{prefix}_shadow_data.pt")
+        if args.save_model:
+            my_save_file(shadow_models, f"{prefix}_shadow_models.pt")
+            my_save_file(shadow_predicts, f"{prefix}_shadow_preds.pt")
     #if args.use_rec_tree:
     reg = train_recon_tree(args, shadow_models, shadow_predicts)
 
@@ -764,10 +794,16 @@ def main():
         help="For reconstruct loss in gradient based attack"
     )
     parser.add_argument(
-        "--load_shadow",
+        "--load_shadow_m",
         type=str,
         default="",
         help="Data of shadow models"
+    )
+    parser.add_argument(
+        "--load_shadow_pred",
+        type=str,
+        default="",
+        help="Data of shadow models pred"
     )
     args = parser.parse_args()
 
@@ -794,7 +830,7 @@ def main():
     target_label = all_train_dataset[args.reco_target][1]
 
     repro_str = (
-        f"mnist_attack{args.reco_target}_label{target_label}_recon_nondp{args.disable_dp}_guess_{args.num_guess}_e{args.shadow_epochs}_"
+        f"mnist_attack{args.reco_target}_label{target_label}_recon_nondp{args.disable_dp}_guess_{args.num_guess}_e{args.shadow_epochs}_r{args.reco_epochs}_{args.reco_inter}_"
         f"gradbased{args.gradient_based_attack}_trials{args.num_trials}_{args.opt_max_iter}_{args.clip_c}_"
         f"{args.lr}_{args.sigma}_"
         f"{args.max_per_sample_grad_norm}_{args.batch_size}_{args.epochs}"
